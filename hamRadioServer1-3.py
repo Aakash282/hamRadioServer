@@ -24,10 +24,10 @@ class GetHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed_path = urlparse.urlparse(self.path)
-        # print parsed_path.path
+        print parsed_path.path
 
         currentPlaylist = parsed_path.path.strip('/').strip('[').strip(']').split(',')
-        if currentPlaylist == ['']:
+        if currentPlaylist == [''] or len(currentPlaylist) <= 1:
             tracksToAdd = 'empty'
         else: 
             tracksToAdd = computeNewTracks(currentPlaylist)
@@ -183,7 +183,7 @@ def loadEchonestAttributes():
 
 # Ensures given track_id has corresponding attributes in dictionary
 def fetchEchonestAttributes(track_id):
-    # First check if track_id is already in dictionary of attributes
+    # First check if track_id is aready in dictionary of attributes
     if track_id in echonest_attributes:
         return True
 
@@ -260,12 +260,15 @@ def getHamRadioDistance(seed, track):
     seed_vals = echonest_attributes[seed]
     track_vals = echonest_attributes[track]
     hamRadio_dist = 0
+    # only using reasonable metrics
+    # whiteList = [0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1]
     for i in range (0, len(seed_vals)):
-        current_term = (track_vals[i] - seed_vals[i]) ** 2
-        if current_term == float('inf') or math.isnan(current_term):
-            continue
-        else:
-            hamRadio_dist += current_term
+        # if whiteList[i]:
+            current_term = (track_vals[i] - seed_vals[i]) ** 2
+            if current_term == float('inf') or math.isnan(current_term):
+                continue
+            else:
+                hamRadio_dist += current_term
     hamRadio_dist = hamRadio_dist ** 0.5
     return hamRadio_dist
 
