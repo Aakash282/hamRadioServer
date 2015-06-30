@@ -27,7 +27,7 @@ class GetHandler(BaseHTTPRequestHandler):
         print parsed_path.path
 
         currentPlaylist = parsed_path.path.strip('/').strip('[').strip(']').split(',')
-        if currentPlaylist == [''] or len(currentPlaylist) <= 1:
+        if currentPlaylist == [''] or len(currentPlaylist[0]) < 3:
             tracksToAdd = 'empty'
         else: 
             tracksToAdd = computeNewTracks(currentPlaylist)
@@ -261,9 +261,9 @@ def getHamRadioDistance(seed, track):
     track_vals = echonest_attributes[track]
     hamRadio_dist = 0
     # only using reasonable metrics
-    # whiteList = [0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1]
+    whiteList = [0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1]
     for i in range (0, len(seed_vals)):
-        # if whiteList[i]:
+        if whiteList[i]:
             current_term = (track_vals[i] - seed_vals[i]) ** 2
             if current_term == float('inf') or math.isnan(current_term):
                 continue
