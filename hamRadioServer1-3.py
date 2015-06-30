@@ -241,7 +241,7 @@ def fetchEchonestAttributes(track_id):
             echonest_attributes[track_id] = values
 
             # Add attributes to database file
-            database_file = 'track_ids70_attributes.txt'
+            database_file = '../data/track_ids70_attributes.txt'
             database = open(database_file, 'a')
             track_sum = '\n'
             track_sum += track_id + "," 
