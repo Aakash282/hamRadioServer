@@ -6,13 +6,18 @@ import (
     "log"
     "io/ioutil"
     "encoding/json"
-    // "strings"
+    "strings"
+    "os"
 )
 
 
 // func filterCandidateList(playlist []string, candidateList []string) []string {
 //   answer := []string{}
-//   for i := range playlist
+//   for i := range candidateList {
+//     if strings.Contains(candidateList[i][1], "Commentary") {
+
+//     }  
+//   }
 
 
 //   return answer
@@ -144,16 +149,95 @@ func requestHandler(w http.ResponseWriter, r *http.Request) {
     // songList := strings.Split(r.URL.Path[6:], ",")
     var tracksToAdd []byte
     if len(r.URL.Path) == 6 {
-      tracksToAdd = []byte("empty\n")
+      tracksToAdd = []byte("empty")
     } else {
       // tracksToAdd = computeNewTracks(songList)
-      tracksToAdd = []byte("string\n")
+      tracksToAdd = []byte("empty")
     }
     w.Header().Set("Access-Control-Allow-Origin", "*")
     w.Header().Set("Access-Control-Expose-Headers", "Access-Control-Allow-Origin")
     w.Header().Set("Access-Control-Allow-Headers","Origin, X-Requested-With, Content-Type, Accept")
     w.Write(tracksToAdd)
     
+}
+
+
+func writePlaylistData(f *os.File, data map[string]interface{}, token string) {
+  playlists := data["items"].([]interface{})
+  client := &http.Client{}
+  for i := range playlists {
+    playlist := playlists[i].(map[string]interface{}) 
+    tracksObj := playlist["tracks"]
+    tracksURL := tracksObj.(map[string]interface{})["href"].(string)
+    var tracks []interface{}
+    for true {
+      req, _ := http.NewRequest("GET", tracksURL, nil)
+      req.Header.Add("Authorization", "Bearer " + token)
+      res, _ := client.Do(req)
+      jdata, _ := ioutil.ReadAll(res.Body)
+      res.Body.Close()
+      var tracklistObj interface{}
+      json.Unmarshal(jdata, &tracklistObj)
+      tracksList := tracklistObj.(map[string]interface{})["items"].([]interface{})
+      for j := range tracksList  {
+        track := tracksList[j].(map[string]interface{})["track"]
+        trackId := track.(map[string]interface{})["id"]
+        tracks = append(tracks, trackId)
+      }
+      if tracklistObj.(map[string]interface{})["next"] == nil {
+        break
+      } else {
+        tracksURL = tracklistObj.(map[string]interface{})["next"].(string)
+      }
+    }
+    fmt.Fprintln(f, playlist["name"], playlist["id"], tracks)
+    fmt.Printf("Writing playlist to file\n")
+  }
+}
+
+
+func idHandler(w http.ResponseWriter, r *http.Request) {
+  request := strings.TrimSuffix(r.URL.Path[5:], "}")
+  idAndToken := strings.Split(request, ",")
+  if len(idAndToken) != 2 {
+    return
+  }
+  // id := "spotify"
+  id := idAndToken[0]
+  token := idAndToken[1] 
+  
+  url := "https://api.spotify.com/v1/users/" + id + "/playlists"
+  client := &http.Client{}
+  req, _ := http.NewRequest("GET", url, nil)
+  req.Header.Add("Authorization", "Bearer " + token)
+  res, _ := client.Do(req)
+  jdata, _ := ioutil.ReadAll(res.Body)
+  res.Body.Close()
+  var obj interface{}
+  json.Unmarshal(jdata, &obj)
+  data := obj.(map[string]interface{})
+  wd, _ := os.Getwd()
+  filePath := wd + "/../userData/" + id
+  os.Remove(filePath)
+  f, _ := os.Create(filePath)
+  defer f.Close()
+  writePlaylistData(f, data, token)
+  for true {
+    if data["next"] == nil {
+      break
+    }
+    url = data["next"].(string)
+    req, _ = http.NewRequest("GET", url, nil)
+    req.Header.Add("Authorization", "Bearer " + token)
+    res, _ = client.Do(req)
+    jdata, _ = ioutil.ReadAll(res.Body)
+    res.Body.Close()
+    var obj interface{}
+    json.Unmarshal(jdata, &obj)
+    data = obj.(map[string]interface{})
+    writePlaylistData(f, data, token)
+  }
+  print("left the loop")
 }
 
 // This handler takes care of the initial authorization token
@@ -169,6 +253,7 @@ func refreshHandler(w http.ResponseWriter, r *http.Request) {
 // This is the main function for the server
 func main() {
     http.HandleFunc("/song/", requestHandler)
+    http.HandleFunc("/ID/", idHandler)
     http.HandleFunc("/token/", authenticateHandler)
     http.HandleFunc("/refresh/", refreshHandler)
     http.ListenAndServe(":8080", nil)
