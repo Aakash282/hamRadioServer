@@ -118,8 +118,9 @@ func fetchRelatedArtist(id string) (r []string) {
     if err != nil {
       log.Fatal(err)
     }
+
     relateds := []string{}
-    items := data.(map[string]interface{})["items"]
+    items := data.(map[string]interface{})["artists"]
     for i := range items.([]interface{}) {
       relatedMap := items.([]interface{})[i].(map[string]interface{})
       relatedId := relatedMap["id"].(string)
@@ -190,7 +191,8 @@ func writePlaylistData(f *os.File, data map[string]interface{}, token string) {
         tracksURL = tracklistObj.(map[string]interface{})["next"].(string)
       }
     }
-    fmt.Fprintln(f, playlist["name"], playlist["id"], tracks)
+    // fmt.Fprintln(f, playlist["id"])
+    fmt.Fprintln(f, playlist["id"], tracks)
     fmt.Printf("Writing playlist to file\n")
   }
 }
@@ -240,6 +242,38 @@ func idHandler(w http.ResponseWriter, r *http.Request) {
   print("left the loop")
 }
 
+func artistHandler(w http.ResponseWriter, r *http.Request) {
+    id := r.URL.Path[8:]
+    firstDegreeList := fetchRelatedArtist(id)
+    type AdjList2D struct {
+      ArtistID string
+      Neighbors []string
+    }
+    type AdjList1D struct {
+      ArtistID string
+      AdjList  []AdjList2D
+    }
+    var list []AdjList2D
+    for i := range firstDegreeList {
+      adj_id := firstDegreeList[i]
+      list2D := fetchRelatedArtist(adj_id)
+      obj2D := new(AdjList2D)
+      obj2D.ArtistID = adj_id
+      obj2D.Neighbors = list2D
+      list = append(list, *obj2D)
+    }
+    obj1D := new(AdjList1D)
+    obj1D.ArtistID = id
+    obj1D.AdjList = list
+    res, err := json.MarshalIndent(obj1D, "", "\t")
+    if err != nil {
+      fmt.Println("error:", err)
+    }
+    os.Stdout.Write(res)
+    fmt.Fprintf(w, "%s", res)
+}
+
+
 // This handler takes care of the initial authorization token
 func authenticateHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintf(w, "Authenticating %s!", r.URL.Path[0:])
@@ -256,5 +290,7 @@ func main() {
     http.HandleFunc("/ID/", idHandler)
     http.HandleFunc("/token/", authenticateHandler)
     http.HandleFunc("/refresh/", refreshHandler)
+    http.HandleFunc("/artist/", artistHandler)
+    fmt.Println("Starting server. Use <Ctrl-C> to exit.")
     http.ListenAndServe(":8080", nil)
 }
