@@ -15,7 +15,7 @@
 import logging
 import sys
 import numpy as np
-
+import time
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(stream=sys.stdout))
@@ -68,7 +68,9 @@ class RNN(object):
         valid_cost_list = []
 
         for epoch in range(1, num_epochs+1):
-            total_cost = 0
+            sys.stdout.write('\r')
+            epoch_train_cost = []
+            epoch_train_start = time.time()
             for batch in range(1, dataset.num_batches+1):
                 x, y = dataset.next()
                 y_pred = self.fprop(x)
@@ -78,33 +80,23 @@ class RNN(object):
                 from nervanagpu import GPUTensor
                 if isinstance(cost, GPUTensor):
                     cost = cost.get()
-                total_cost += cost
-                logger.info('epoch: {}, batch: {}, train_cost: {}'.format(
-                       epoch, batch, cost))
 
                 self.bprop()
                 self.update()
 
-                # save train/valid scores every 100 batches
-                # if batch % 9600 == 0:
-                #     train_cost_list.append(cost)
-                #     valid_cost = []
-                #     for batch in range(dataset.num_valid_batches):
-                #         x, y = dataset.next_valid_batch()
-                #         y_pred = self.fprop(x)
-                #         cost = self.cost(y_pred, y)
+                epoch_train_cost.append(cost)
+                progress_bar = '=' * int(float(batch) / dataset.num_batches * 50)
+                time_elapsed = time.time() - epoch_train_start
+                progress_string = 'Train [{:<50}] {}/{} batches, {:.2f} cost, {:.2f} seconds'.format(
+                    progress_bar, batch, dataset.num_batches, np.mean(epoch_train_cost), time_elapsed)
 
-                #         from nervanagpu import GPUTensor
-                #         if isinstance(cost, GPUTensor):
-                #             cost = cost.get()
+                sys.stdout.write('\r')
+                sys.stdout.write(progress_string)
+                sys.stdout.flush()
 
-                #         logger.info('epoch: {}, batch: {}, valid_cost: {}'.format(
-                #                epoch, batch, cost))
+            sys.stdout.write('\r')
+            sys.stdout.write(progress_string + '\n')
 
-                #         valid_cost.append(cost)
-
-                #     valid_cost_list.append(valid_cost)
-                
         return train_cost_list, valid_cost_list
 
     def get_params(self):

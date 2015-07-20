@@ -2,6 +2,7 @@ import os
 import os.path as path
 import numpy as np
 import logging
+from sklearn import preprocessing
 
 from rnn import RNN
 from lstm import LSTM
@@ -36,12 +37,30 @@ class PlayList(object):
     user_paths = os.listdir(dataDir)
 
     def __init__(self):
-        self.attributes = loadEchonestAttributes()
+        self.attributes, self.song_index = loadEchonestAttributes()
+        self.attributes = self.normalize(self.attributes)
         splits = ('train', 'test')
         self.inputs = {split:None for split in (splits)}
         self.targets = {split:None for split in (splits)}
         self.batch_idx = 0
         self.dtype = np.float32
+
+    def find_normalize_constants(self):
+        scaler = preprocessing.StandardScaler()
+        scaler.fit(self.attributes)
+        np.savetxt('means.txt', scaler.mean_)
+        np.savetxt('std.txt', scaler.std_)
+
+    def normalize(self, X):
+        try:
+            scaler = preprocessing.StandardScaler()
+            scaler.mean_ = np.loadtxt('means.txt')
+            scaler.std_ = np.loadtxt('std.txt')
+        except IOError:
+            print "Normalizing constants not found."
+            print "Finding constants now. Run script again."
+            self.find_normalize_constants()
+        return scaler.transform(X)
 
     def next(self):
         start = self.batch_idx * batch_size
@@ -53,16 +72,19 @@ class PlayList(object):
 
     def load_split(self, split):
         seqs = self.create_sequences(self.load_user_playlists('spotify'))
+        if len(seqs) == 0:
+            print "No seqs found"
+            return
         print "Loading %d sequences and %d songs" %(len(seqs), sum([len(seq) for seq in seqs]))
         # Each col of X is a sequence of 10 songs
         X = np.zeros((seq_length * num_attr, len(seqs)))
         Y = np.zeros(X.shape)
         for i, seq in enumerate(seqs):
-            X[:, i] = np.asarray([val for song_id in seq for val in self.attributes[song_id]])
+            X[:, i] = np.hstack([val for song_id in seq for val in self.attributes[self.song_index[song_id], :]])
         Y[:-1, :] = X[1:, :]
         # TODO Deal with end of Y
         self.num_batches = len(seqs) // batch_size
-
+        #devX = backend.zeros(X.shape, dtype=self.dtype)
         self.inputs[split] = backend.array(X, dtype=self.dtype)
         self.targets[split] = backend.array(Y, dtype=self.dtype)
         return X, Y 
@@ -82,7 +104,7 @@ class PlayList(object):
         with open(self.dataDir + user_file, 'r') as f:
             playlists = [line[line.find('[')+1:line.find(']')].split() for line in f]
         # Filter out nil songs or songs not in attributes
-        playlists = [filter(lambda x: x != '<nil>' and x in self.attributes, playlist) for playlist in playlists]
+        playlists = [filter(lambda x: x != '<nil>' and x in self.song_index, playlist) for playlist in playlists]
         # Filter out short playlists
         playlists = [playlist for playlist in playlists if len(playlist) >= seq_length]
         if len(playlists) == 0:
@@ -97,14 +119,16 @@ def loadEchonestAttributes():
     database_file = path.dirname(path.dirname(path.dirname(path.realpath(__file__)))) + '/data/attributes.txt'
 
     # Dictionary structure to be filled and returned
-    attributes = {}
+    attributes = []
+    song_index = {}
     database = open(database_file, 'r')
-    for line in database:
+    for index, line in enumerate(database):
         row = line.rstrip().split(',')
         # TODO Deal with None's
-        attributes[row[0]] = [float(row[i]) if row[i] != 'None' else 0 for i in range(1, num_attr+1)]
+        attributes.append([float(row[i]) if row[i] != 'None' else 0 for i in range(1, num_attr+1)])
+        song_index[row[0]] = index
     database.close()
-    return attributes
+    return np.asarray(attributes), song_index
 
 def construct_model():
 
