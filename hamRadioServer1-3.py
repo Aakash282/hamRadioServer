@@ -17,7 +17,7 @@ import random
 echonest_attributes = {}
 
 keyChoice = 0
-apiKey = ['5MGJPPFFJLQRSITZF', 'ULUECAILWIK1KJFED', 'VBFP0ICNRRIKKKQO6']
+apiKey = ['key1', 'key2', 'key3']
 
 
 class GetHandler(BaseHTTPRequestHandler):
